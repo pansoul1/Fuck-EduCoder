@@ -3,7 +3,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-1.1-blue)
 
-Fuck EduCoder 是一个浏览器油猴脚本和配套服务器系统，用于改善 EduCoder 平台上的学习体验。脚本通过禁用监控功能、支持题目提取和 AI 辅助答案生成等功能，帮助学生更有效地完成课程作业。
+Fuck EduCoder 是一个浏览器油猴脚本和配套服务器系统，用于改善 EduCoder 平台上的学习体验。脚本通过禁用监控功能、支持题目提取和 AI 辅助答案生成等功能，帮助学生更有效地完成考试。
 
 > ⚠️ **免责声明**：本项目仅供学习和研究使用。使用本项目请遵守相关法律法规和教育机构的规定。滥用本工具可能导致违反学校政策或学术不端行为。
 
