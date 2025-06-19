@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduCoder卡密管理系统</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2196F3;
+            --primary-hover: #1976D2;
+            --danger-color: #f44336;
+            --danger-hover: #e53935;
+            --success-color: #4CAF50;
+            --success-hover: #45a049;
+            --text-color: #333;
+            --bg-color: #f5f5f5;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+
+        .nav-link {
+            color: rgba(255, 255, 255, 0.9) !important;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .nav-link:hover {
+            color: #fff !important;
+            transform: translateY(-1px);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            margin-bottom: 20px;
+            border: none;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background-color: transparent;
+            border-bottom: 1px solid var(--border-color);
+            padding: 20px;
+        }
+
+        .card-body {
+            padding: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-color);
+        }
+
+        .form-control {
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 15px;
+            transition: all 0.3s ease;
+        }
+
+        .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            border-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            border-color: var(--danger-color);
+        }
+
+        .btn-danger:hover {
+            background-color: var(--danger-hover);
+            border-color: var(--danger-hover);
+            transform: translateY(-1px);
+        }
+
+        .table {
+            width: 100%;
+            margin-bottom: 0;
+        }
+
+        .table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .table td {
+            vertical-align: middle;
+        }
+
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background-color: rgba(76, 175, 80, 0.1);
+            color: var(--success-color);
+        }
+
+        .status-inactive {
+            background-color: rgba(244, 67, 54, 0.1);
+            color: var(--danger-color);
+        }
+
+        .token-info {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+        }
+
+        .token-value {
+            font-family: monospace;
+            font-weight: 600;
+            color: var(--primary-color);
+            background-color: rgba(33, 150, 243, 0.1);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .expiry-options {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .expiry-option {
+            display: flex;
+            align-items: center;
+        }
+
+        .expiry-option input[type="radio"] {
+            margin-right: 8px;
+        }
+
+        .validity-days {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .validity-days input {
+            width: 100px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sample-key {
+            font-family: monospace;
+            color: #666;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .card {
+                margin-bottom: 15px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+
+            .expiry-options {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+
+        .copy-btn {
+            transition: all 0.3s ease;
+            padding: 4px 8px;
+        }
+        
+        .copy-btn:hover {
+            background-color: #e9ecef;
+        }
+        
+        .copy-tooltip {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark mb-4">
+        <div class="container">
+            <a class="navbar-brand" href="/admin">EduCoder 卡密管理系统</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/admin">
+                            <i class="bi bi-key"></i> 卡密管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin/devices">
+                            <i class="bi bi-device-hdd"></i> 设备管理
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin/users">
+                            <i class="bi bi-people"></i> 用户信息
+                        </a>
+                    </li>
+                </ul>
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/admin/logout">
+                            <i class="bi bi-box-arrow-right"></i> 退出登录
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="token-info">
+            <p class="mb-0">
+                <i class="bi bi-shield-lock"></i> 管理员令牌（用于API请求）：
+                <span class="token-value">{{ admin_token }}</span>
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="h4 mb-0">创建新卡密</h2>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label for="key-input">卡密 (留空自动生成):</label>
+                    <input type="text" class="form-control" id="key-input" placeholder="留空则自动生成">
+                    <div id="auto-key-settings" class="mt-3">
+                        <div class="input-group">
+                            <label for="key-length" class="me-2">卡密长度:</label>
+                            <input type="number" class="form-control" id="key-length" value="16" min="8" max="32">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>有效期设置:</label>
+                    <div class="expiry-options">
+                        <div class="expiry-option">
+                            <input type="radio" id="no-expiry" name="expiry-type" value="none" checked>
+                            <label for="no-expiry">永久有效</label>
+                        </div>
+                        <div class="expiry-option">
+                            <input type="radio" id="custom-expiry" name="expiry-type" value="custom">
+                            <label for="custom-expiry">自定义有效期</label>
+                        </div>
+                    </div>
+                    <div id="custom-expiry-input" style="display: none;">
+                        <input type="datetime-local" class="form-control" id="expiry-date">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="max-devices">最大设备数:</label>
+                    <input type="number" class="form-control" id="max-devices" value="1" min="1">
+                </div>
+
+                <button class="btn btn-primary" onclick="createKey()">
+                    <i class="bi bi-plus-circle"></i> 创建卡密
+                </button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2 class="h4 mb-0">卡密列表</h2>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <button id="refresh-keys-btn" class="btn btn-outline-primary">
+                        <i class="bi bi-arrow-clockwise"></i> 刷新列表
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>卡密</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>过期时间</th>
+                                <th>最大设备数</th>
+                                <th>已使用</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="keys-table-body">
+                            <!-- 卡密列表将通过JavaScript动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // API基础URL
+        const API_BASE_URL = '/api';
+        // 管理员令牌
+        const ADMIN_TOKEN = '{{ admin_token }}';
+        
+        // 创建卡密
+        async function createKey() {
+            const keyInput = document.getElementById('key-input');
+            const keyLength = document.getElementById('key-length');
+            const maxDevices = document.getElementById('max-devices');
+            const expiryType = document.querySelector('input[name="expiry-type"]:checked').value;
+            const expiryDate = document.getElementById('expiry-date');
+            
+            let expiresAt = null;
+            if (expiryType === 'custom' && expiryDate.value) {
+                expiresAt = expiryDate.value;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/create-key`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        admin_token: ADMIN_TOKEN,
+                        key: keyInput.value || undefined,
+                        key_length: keyInput.value ? undefined : parseInt(keyLength.value),
+                        expires_at: expiresAt,
+                        max_devices: parseInt(maxDevices.value) || 1
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`创建成功: ${data.key}`);
+                    keyInput.value = '';
+                    // 刷新卡密列表
+                    fetchKeys();
+                } else {
+                    alert(`创建失败: ${data.message}`);
+                }
+            } catch (error) {
+                alert(`创建失败: ${error.message}`);
+            }
+        }
+        
+        // 初始化过期时间选项的交互
+        function initExpiryOptions() {
+            const radioButtons = document.querySelectorAll('input[name="expiry-type"]');
+            const customExpiryInput = document.getElementById('custom-expiry-input');
+            
+            radioButtons.forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'custom') {
+                        customExpiryInput.style.display = 'block';
+                    } else {
+                        customExpiryInput.style.display = 'none';
+                    }
+                });
+            });
+        }
+        
+        // 生成示例卡密
+        function generateSampleKey() {
+            const length = parseInt(document.getElementById('key-length').value);
+            const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+            
+            // 生成随机字符
+            let randomChars = '';
+            for (let i = 0; i < length; i++) {
+                randomChars += alphabet[Math.floor(Math.random() * alphabet.length)];
+            }
+            
+            // 每4个字符插入一个连字符
+            const groups = [];
+            for (let i = 0; i < length; i += 4) {
+                groups.push(randomChars.substring(i, i + 4));
+            }
+            const formattedKey = groups.join('-');
+            
+            return formattedKey;
+        }
+        
+        // 获取所有卡密
+        async function fetchKeys() {
+            const keysTableBody = document.getElementById('keys-table-body');
+            keysTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;"><div class="loading"></div> 加载中...</td></tr>';
+            
+            try {
+                // 添加随机参数，避免缓存
+                const cacheBuster = new Date().getTime();
+                const response = await fetch(`${API_BASE_URL}/admin/keys?admin_token=${ADMIN_TOKEN}&_=${cacheBuster}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.keys.length === 0) {
+                        keysTableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">暂无卡密</td></tr>';
+                        return;
+                    }
+                    
+                    keysTableBody.innerHTML = '';
+                    data.keys.forEach(key => {
+                        const row = document.createElement('tr');
+                        
+                        // 格式化日期
+                        const createdAt = key.created_at ? new Date(key.created_at).toLocaleString() : '无';
+                        const expiresAt = key.expires_at ? new Date(key.expires_at).toLocaleString() : '永不过期';
+                        
+                        row.innerHTML = `
+                            <td>${key.id}</td>
+                            <td>
+                                <span class="token-value">${key.key_value}</span>
+                                <button class="btn btn-sm btn-light copy-btn ms-2" data-key="${key.key_value}" title="复制卡密">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </td>
+                            <td><span class="status-badge ${key.is_active ? 'status-active' : 'status-inactive'}">
+                                ${key.is_active ? '激活' : '停用'}
+                            </span></td>
+                            <td>${createdAt}</td>
+                            <td>${expiresAt}</td>
+                            <td>${key.max_devices}</td>
+                            <td>${key.used_count}</td>
+                            <td>
+                                <div class="action-buttons">
+                                    ${key.is_active ? 
+                                    `<button class="btn btn-sm btn-warning deactivate-btn" data-key="${key.key_value}"><i class="bi bi-dash-circle"></i> 停用</button>` : 
+                                    '<span class="badge bg-secondary">已停用</span>'}
+                                    <button class="btn btn-sm btn-danger delete-btn" data-key="${key.key_value}"><i class="bi bi-trash"></i> 删除</button>
+                                </div>
+                            </td>
+                        `;
+                        
+                        keysTableBody.appendChild(row);
+                    });
+                    
+                    // 添加复制按钮事件监听
+                    document.querySelectorAll('.copy-btn').forEach(btn => {
+                        btn.addEventListener('click', (e) => {
+                            const keyValue = e.target.getAttribute('data-key') || e.target.closest('.copy-btn').getAttribute('data-key');
+                            copyToClipboard(keyValue, e.target.closest('.copy-btn'));
+                        });
+                    });
+                    
+                    // 添加停用按钮事件监听
+                    document.querySelectorAll('.deactivate-btn').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const keyValue = e.target.getAttribute('data-key') || e.target.closest('.deactivate-btn').getAttribute('data-key');
+                            if (confirm(`确定要停用卡密 ${keyValue} 吗？`)) {
+                                await deactivateKey(keyValue, e.target.closest('.deactivate-btn'));
+                            }
+                        });
+                    });
+                    
+                    // 添加删除按钮事件监听
+                    document.querySelectorAll('.delete-btn').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            const keyValue = e.target.getAttribute('data-key') || e.target.closest('.delete-btn').getAttribute('data-key');
+                            if (confirm(`确定要删除卡密 ${keyValue} 吗？此操作不可恢复！`)) {
+                                await deleteKey(keyValue, e.target.closest('.delete-btn'));
+                            }
+                        });
+                    });
+                } else {
+                    keysTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #f44336;">获取失败: ${data.message}</td></tr>`;
+                }
+            } catch (error) {
+                console.error("获取卡密列表失败:", error);
+                keysTableBody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: #f44336;">获取失败: ${error.message}</td></tr>`;
+            }
+        }
+        
+        // 停用卡密
+        async function deactivateKey(keyValue, buttonElement) {
+            buttonElement.disabled = true;
+            buttonElement.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/deactivate-key`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        admin_token: ADMIN_TOKEN,
+                        key: keyValue
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 刷新卡密列表
+                    fetchKeys();
+                } else {
+                    alert(`停用失败: ${data.message}`);
+                    buttonElement.disabled = false;
+                    buttonElement.innerHTML = '<i class="bi bi-dash-circle"></i> 停用';
+                }
+            } catch (error) {
+                alert(`停用失败: ${error.message}`);
+                buttonElement.disabled = false;
+                buttonElement.innerHTML = '<i class="bi bi-dash-circle"></i> 停用';
+            }
+        }
+        
+        // 删除卡密
+        async function deleteKey(keyValue, buttonElement) {
+            buttonElement.disabled = true;
+            buttonElement.innerHTML = '<div class="loading"></div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/delete-key`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        admin_token: ADMIN_TOKEN,
+                        key: keyValue
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // 刷新卡密列表
+                    fetchKeys();
+                } else {
+                    alert(`删除失败: ${data.message}`);
+                    buttonElement.disabled = false;
+                    buttonElement.innerHTML = '<i class="bi bi-trash"></i> 删除';
+                }
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
+                buttonElement.disabled = false;
+                buttonElement.innerHTML = '<i class="bi bi-trash"></i> 删除';
+            }
+        }
+        
+        // 复制文本到剪贴板
+        function copyToClipboard(text, buttonElement) {
+            // 保存原始图标
+            const originalInnerHTML = buttonElement.innerHTML;
+            
+            // 尝试使用新的Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text)
+                    .then(() => {
+                        // 显示成功图标
+                        buttonElement.innerHTML = '<i class="bi bi-check-lg"></i>';
+                        
+                        // 添加一个动画效果
+                        buttonElement.classList.add('btn-success');
+                        buttonElement.classList.remove('btn-light');
+                        
+                        // 创建浮动提示
+                        showTooltip(buttonElement, '复制成功');
+                        
+                        // 2秒后恢复原始图标
+                        setTimeout(() => {
+                            buttonElement.innerHTML = originalInnerHTML;
+                            buttonElement.classList.add('btn-light');
+                            buttonElement.classList.remove('btn-success');
+                        }, 1500);
+                    })
+                    .catch(err => {
+                        console.error('复制失败:', err);
+                        showTooltip(buttonElement, '复制失败');
+                        
+                        // 显示失败图标
+                        buttonElement.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
+                        buttonElement.classList.add('btn-danger');
+                        buttonElement.classList.remove('btn-light');
+                        
+                        // 2秒后恢复原始图标
+                        setTimeout(() => {
+                            buttonElement.innerHTML = originalInnerHTML;
+                            buttonElement.classList.add('btn-light');
+                            buttonElement.classList.remove('btn-danger');
+                        }, 1500);
+                    });
+            } else {
+                // 回退方法：使用传统的document.execCommand
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';  // 防止滚动到底部
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        // 显示成功图标
+                        buttonElement.innerHTML = '<i class="bi bi-check-lg"></i>';
+                        buttonElement.classList.add('btn-success');
+                        buttonElement.classList.remove('btn-light');
+                        showTooltip(buttonElement, '复制成功');
+                    } else {
+                        // 显示失败图标
+                        buttonElement.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
+                        buttonElement.classList.add('btn-danger');
+                        buttonElement.classList.remove('btn-light');
+                        showTooltip(buttonElement, '复制失败');
+                    }
+                } catch (err) {
+                    console.error('复制失败:', err);
+                    // 显示失败图标
+                    buttonElement.innerHTML = '<i class="bi bi-exclamation-triangle"></i>';
+                    buttonElement.classList.add('btn-danger');
+                    buttonElement.classList.remove('btn-light');
+                    showTooltip(buttonElement, '复制失败');
+                }
+                
+                document.body.removeChild(textarea);
+                
+                // 2秒后恢复原始图标
+                setTimeout(() => {
+                    buttonElement.innerHTML = originalInnerHTML;
+                    buttonElement.classList.add('btn-light');
+                    buttonElement.classList.remove('btn-success');
+                    buttonElement.classList.remove('btn-danger');
+                }, 1500);
+            }
+        }
+        
+        // 显示提示
+        function showTooltip(element, message) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'copy-tooltip';
+            tooltip.textContent = message;
+            
+            // 设置样式
+            tooltip.style.position = 'absolute';
+            tooltip.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+            tooltip.style.color = 'white';
+            tooltip.style.padding = '5px 10px';
+            tooltip.style.borderRadius = '4px';
+            tooltip.style.fontSize = '12px';
+            tooltip.style.zIndex = '1000';
+            tooltip.style.pointerEvents = 'none'; // 防止干扰鼠标事件
+            tooltip.style.opacity = '0';
+            tooltip.style.transition = 'opacity 0.3s ease';
+            
+            // 添加到文档
+            document.body.appendChild(tooltip);
+            
+            // 获取按钮位置
+            const rect = element.getBoundingClientRect();
+            
+            // 设置位置 - 显示在按钮上方
+            tooltip.style.left = `${rect.left + (rect.width / 2) - (tooltip.offsetWidth / 2)}px`;
+            tooltip.style.top = `${rect.top - tooltip.offsetHeight - 5}px`;
+            
+            // 显示提示
+            setTimeout(() => {
+                tooltip.style.opacity = '1';
+            }, 10);
+            
+            // 2秒后移除
+            setTimeout(() => {
+                tooltip.style.opacity = '0';
+                setTimeout(() => {
+                    if (document.body.contains(tooltip)) {
+                        document.body.removeChild(tooltip);
+                    }
+                }, 300);
+            }, 1500);
+        }
+        
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initExpiryOptions();
+            
+            // 立即加载卡密列表
+            fetchKeys();
+            
+            // 为刷新按钮添加事件监听器
+            const refreshBtn = document.getElementById('refresh-keys-btn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', fetchKeys);
+            }
+            
+            // 初始化示例卡密
+            const autoKeySettings = document.getElementById('auto-key-settings');
+            if (autoKeySettings) {
+                const sampleKeyDiv = document.createElement('div');
+                sampleKeyDiv.className = 'sample-key mt-2';
+                sampleKeyDiv.id = 'sample-key';
+                sampleKeyDiv.textContent = `示例: ${generateSampleKey()}`;
+                autoKeySettings.appendChild(sampleKeyDiv);
+                
+                const generateSampleBtn = document.createElement('button');
+                generateSampleBtn.type = 'button';
+                generateSampleBtn.className = 'btn btn-sm btn-outline-secondary mt-2';
+                generateSampleBtn.id = 'generate-sample-btn';
+                generateSampleBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> 生成新示例';
+                generateSampleBtn.addEventListener('click', () => {
+                    document.getElementById('sample-key').textContent = `示例: ${generateSampleKey()}`;
+                });
+                autoKeySettings.appendChild(generateSampleBtn);
+            }
+        });
+    </script>
+</body>
+</html> 
