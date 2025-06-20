@@ -62,6 +62,17 @@ Fuck EduCoder/
 3. 在考试/练习页面点击"提取题目"按钮获取题目
 4. 点击"AI设置"配置 AI 接口和自动生成答案的选项
 
+### AI 模型配置
+
+脚本支持两种AI模型接口：豆包和DeepSeek。
+
+- **豆包API**：[https://www.volcengine.com/product/doubao/](https://www.volcengine.com/product/doubao/)
+  - 推荐使用，有免费额度
+  - 如需更快的响应速度，可以在设置中关闭"深度思考"功能
+
+- **DeepSeek API**：[https://platform.deepseek.com/usage](https://platform.deepseek.com/usage)
+
+在脚本面板的"AI设置"中，您可以选择使用哪个模型，并输入对应的API密钥。获取API密钥需要在上述网站注册账号并申请。
 
 ## 🤝 贡献指南
 
