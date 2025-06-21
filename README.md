@@ -1,7 +1,7 @@
 # Fuck EduCoder
 
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-1.1-blue)
+![Version](https://img.shields.io/badge/version-1.2-blue)
 
 > ### ⚠️ **重要说明：此脚本仅适用于 EduCoder 平台的考试功能！**
 
@@ -30,9 +30,10 @@ Fuck EduCoder 是一个浏览器油猴脚本，用于改善 EduCoder 平台上�
   - 自动识别题目类型与选项
   - 支持复制与保存提取的题目
 - 🤖 **AI 辅助解答**
-  - 支持 DeepSeek/豆包 AI 接口
+  - 支持 DeepSeek/豆包/通义千问 AI 接口
   - 自动生成题目答案
   - 可配置 API 密钥和模型设置
+  - 支持深度思考模式
 
 ## 📋 项目结构
 
@@ -61,18 +62,45 @@ Fuck EduCoder/
 2. 脚本将自动禁用监控功能
 3. 在考试/练习页面点击"提取题目"按钮获取题目
 4. 点击"AI设置"配置 AI 接口和自动生成答案的选项
+5. 对于程序填空题，可以使用"跳转到程序填空题"按钮快速定位
 
 ### AI 模型配置
 
-脚本支持两种AI模型接口：豆包和DeepSeek。
+脚本支持三种AI模型接口：豆包、DeepSeek和通义千问。
 
 - **豆包API**：[https://www.volcengine.com/product/doubao/](https://www.volcengine.com/product/doubao/)
   - 推荐使用，有免费额度
-  - 如需更快的响应速度，可以在设置中关闭"深度思考"功能
+  - 默认开启深度思考，可以在设置中关闭"深度思考"功能提高响应速度
 
 - **DeepSeek API**：[https://platform.deepseek.com/usage](https://platform.deepseek.com/usage)
+  - 通过切换模型实现深度思考：普通模式用`deepseek-chat`，思考模式用`deepseek-reasoner`
+
+- **通义千问API**：[https://bailian.console.aliyun.com/](https://bailian.console.aliyun.com/)
+  - 推荐使用，有免费额度
+  - 默认关闭深度思考，可以在设置中开启
 
 在脚本面板的"AI设置"中，您可以选择使用哪个模型，并输入对应的API密钥。获取API密钥需要在上述网站注册账号并申请。
+
+## 📝 更新日志
+
+### v1.2
+- ✨ 新增通义千问(Qwen)模型支持
+- 🔧 添加深度思考模式配置选项
+- 🐛 修复程序填空题跳转问题
+- 🐛 修复HTML标签显示问题
+- 🚀 优化AI答案生成逻辑
+- 🚀 添加程序填空题快速跳转按钮
+
+### v1.1 
+- ✨ 新增豆包AI模型支持
+- 🔧 添加API密钥配置功能
+- 🚀 优化题目提取和显示逻辑
+
+### v1.0 
+- 🚀 首次发布
+- ✨ 基本监控禁用功能
+- ✨ DeepSeek AI模型支持
+- ✨ 题目提取和答案生成功能
 
 ## 🤝 贡献指南
 
@@ -94,4 +122,7 @@ Fuck EduCoder/
 A: 请确保使用最新版本的脚本，并检查浏览器控制台是否有错误信息。某些网站可能更新了防护机制导致脚本失效。
 
 **Q: 我可以使用自己的 AI 接口吗？**  
-A: 是的，点击脚本界面中的"AI设置"按钮，输入您的 API 密钥即可。 
+A: 是的，点击脚本界面中的"AI设置"按钮，输入您的 API 密钥即可。
+
+**Q: 如何选择适合的AI模型？**  
+A: 豆包模型有免费额度且响应较快，建议首选；DeepSeek的思考模式(deepseek-reasoner)对编程题效果较好；通义千问需要开启流式调用才能使用思考模式。 

