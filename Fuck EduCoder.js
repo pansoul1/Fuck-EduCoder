@@ -2039,7 +2039,7 @@
 
                             while (parentElement && currentDepth < maxSearchDepth) {
                                 // 扩展题型标签列表，包括可能的程序填空题标签
-                                const typeLabels = ['简答题', '单选题', '多选题', '判断题', '填空题', '程序题', '编程题', '程序填空题'];
+                                const typeLabels = ['简答题', '单选题', '多选题', '判断题', '程序填空题', '填空题', '程序题', '编程题'];
 
                                 const elementText = parentElement.textContent || '';
                                 const foundType = typeLabels.find(label => elementText.includes(label));
@@ -2062,7 +2062,7 @@
                                 typeElements.forEach(typeEl => {
                                     // 扩展题型标签列表，包括可能的程序填空题标签
                                     const typeText = typeEl.textContent || '';
-                                    const containsType = ['简答题', '单选题', '多选题', '判断题', '填空题', '程序题', '编程题', '程序填空题'].some(t => typeText.includes(t));
+                                    const containsType = ['简答题', '单选题', '多选题', '判断题', '程序填空题', '填空题', '程序题', '编程题'].some(t => typeText.includes(t));
 
                                     if (containsType) {
                                         const rect1 = element.getBoundingClientRect();
@@ -2081,7 +2081,7 @@
 
                                 if (closestTypeElement) {
                                     const typeText = closestTypeElement.textContent;
-                                    const typeMatch = typeText.match(/(简答题|单选题|多选题|判断题|填空题|程序题|编程题|程序填空题)/);
+                                    const typeMatch = typeText.match(/(简答题|单选题|多选题|判断题|程序填空题|填空题|程序题|编程题)/);
                                     if (typeMatch) {
                                         questionType = typeMatch[1];
                                         console.log(`通过距离找到题型: ${questionType}`);
@@ -2104,7 +2104,7 @@
                                 }
 
                                 // 尝试直接匹配程序填空题
-                                if (questionType.includes('程序') || questionType.includes('填空')) {
+                                if (questionType === '程序填空题') {
                                     console.log('尝试直接匹配程序填空题');
                                     for (let i = 1; i < FuckEduCoder.allQuestions.length; i++) {
                                         // 对于程序填空题，直接检查questionType === 8
@@ -2127,9 +2127,7 @@
                                     for (let i = 1; i < FuckEduCoder.allQuestions.length; i++) {
                                         // 检查题目类型是否匹配
                                         const isTypeMatch = FuckEduCoder.allQuestions[i].type === questionType ||
-                                            // 特殊处理程序填空题
-                                            (questionType.includes('程序') && FuckEduCoder.allQuestions[i].questionType === 8) ||
-                                            (questionType.includes('填空') && FuckEduCoder.allQuestions[i].questionType === 8);
+                                            (questionType === '程序填空题' && FuckEduCoder.allQuestions[i].questionType === 8);
 
                                         // 记录每个题目的匹配情况
                                         console.log(`索引 ${i} 匹配情况: isTypeMatch=${isTypeMatch}, 类型=${FuckEduCoder.allQuestions[i].type}, 查找类型=${questionType}`);
